@@ -21,9 +21,9 @@ jobs:
     name: Check for new release
     outputs:
       new_release: ${{ steps.compare.outputs.new_release }}
-      latest_tag: ${{ steps.latest_release.outputs.latest_tag }}
-      tar_url: ${{ steps.latest_release.outputs.tar_url }}
-      checksum_url: ${{ steps.latest_release.outputs.checksum_url }}
+      latest_tag: ${{ steps.latest_release_info.outputs.latest_tag }}
+      tar_url: ${{ steps.latest_release_info.outputs.tar_url }}
+      checksum_url: ${{ steps.latest_release_info.outputs.checksum_url }}
 
     steps:
       - name: Get latest release info
