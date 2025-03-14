@@ -47,6 +47,7 @@ jobs:
       - name: Compare current tag with cached release tag
         id: compare
         run: |
+          TAG_NAME=${{ steps.latest_release_info.outputs.latest_tag }}
           PREV_TAG_NAME=$(cat .prev_release 2>/dev/null || echo "none")
           echo "Previous tag: $PREV_TAG_NAME"
           echo "Current tag: $TAG_NAME"
