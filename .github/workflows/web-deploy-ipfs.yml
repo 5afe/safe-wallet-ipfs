@@ -1,4 +1,5 @@
-name: Web Deploy to IPFS
+# This workflow is used to deploy a safe-wallet-monorepo release to IPFS
+name: Safe-Wallet-Monorepo Web Release on IPFS
 
 on:
   schedule:
@@ -133,7 +134,7 @@ jobs:
         run: |
           rm -rf /tmp/release /tmp/checksum.txt /tmp/release.tar.gz
 
-  ## Create a release on GitHub
+  ## Create a release note
   release_note:
     if: ${{ needs.deploy.outputs.ipfs_hash != '' }}
     runs-on: ubuntu-latest
@@ -157,10 +158,12 @@ jobs:
           tag_name: ${{ needs.check-release.outputs.latest_tag }}
           release_name: Release ${{ needs.check-release.outputs.latest_tag }}
           body: |
-            ## Safe-Wallet-Monorepo on IPFS Release
-            - Version: `${{ needs.check-release.outputs.latest_tag }}`
-            - Release link: https://github.com/safe-global/safe-wallet-monorepo/releases/tag/${{ needs.check-release.outputs.latest_tag }}
-            - IPFS hash: `${{ needs.deploy.outputs.ipfs_hash }}`
-            - IPFS link: https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/
+            - 🧩 Version: `${{ needs.check-release.outputs.latest_tag }}`
+            - 📦 Release link: https://github.com/safe-global/safe-wallet-monorepo/releases/tag/${{ needs.check-release.outputs.latest_tag }}
+            - 🔏 CID: `${{ needs.deploy.outputs.ipfs_hash }}`
+            - 🌐 Preview:
+              - [dweb.link](https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/)
+              - [w3s.link](https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/)
+              - [inbrowser.link](https://inbrowser.link/ipfs/${{ needs.deploy.outputs.ipfs_hash }})
           draft: false
           prerelease: false
