@@ -12,10 +12,6 @@ jobs:
   ## - latest_tag: the tag of the latest release
   ## - tar_url: the URL of the tarball of the latest release
   ## - checksum_url: the URL of the checksum of the latest release
-  ## Environment variables:
-  ## - TAG_NAME: the tag of the latest release
-  ## - TAR_URL: the URL of the tarball of the latest release
-  ## - CHECKSUM_URL: the URL of the checksum of the latest release
   check-release:
     runs-on: ubuntu-latest
     name: Check for new release
