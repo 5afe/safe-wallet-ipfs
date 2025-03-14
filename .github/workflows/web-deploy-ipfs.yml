@@ -1,8 +1,8 @@
 name: Web Deploy to IPFS
 
 on:
-  # schedule:
-  #   - cron: "0 * * * *" # Runs every hour
+  schedule:
+    - cron: "0 * * * *" # Runs every hour
   workflow_dispatch: # Allows manual triggering
 
 jobs:
@@ -127,8 +127,6 @@ jobs:
           storacha-proof: ${{ secrets.STORACHA_PROOF }}
           pinata-jwt-token: ${{ secrets.PINATA_JWT }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # set-github-status: "false"
-          # set-pr-comment: "false"
 
       - name: Print IPFS hash and add to outputs
         run: |
@@ -164,9 +162,9 @@ jobs:
           release_name: Release ${{ needs.check-release.outputs.latest_tag }}
           body: |
             ## Safe-Wallet-Monorepo on IPFS Release
-            - Version: ${{ needs.check-release.outputs.latest_tag }}
+            - Version: `${{ needs.check-release.outputs.latest_tag }}`
             - Release link: https://github.com/safe-global/safe-wallet-monorepo/releases/tag/${{ needs.check-release.outputs.latest_tag }}
-            - IPFS hash: ${{ needs.deploy.outputs.ipfs_hash }}
+            - IPFS hash: `${{ needs.deploy.outputs.ipfs_hash }}`
             - IPFS link: https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/
           draft: false
           prerelease: false
