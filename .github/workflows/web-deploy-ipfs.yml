@@ -35,10 +35,6 @@ jobs:
           TAR_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url')
           CHECKSUM_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name | endswith("-sha256-checksum.txt")) | .browser_download_url')
 
-          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
-          echo "TAR_URL=$TAR_URL" >> $GITHUB_ENV
-          echo "CHECKSUM_URL=$CHECKSUM_URL" >> $GITHUB_ENV
-
           echo "latest_tag=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "tar_url=$TAR_URL" >> $GITHUB_OUTPUT
           echo "checksum_url=$CHECKSUM_URL" >> $GITHUB_OUTPUT
@@ -148,7 +144,9 @@ jobs:
     if: ${{ needs.deploy.outputs.ipfs_hash != '' }}
     runs-on: ubuntu-latest
     name: Create Release Note
-    needs: deploy
+    needs:
+      - check-release
+      - deploy
     permissions:
       contents: read
       statuses: write
@@ -162,12 +160,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.TAG_NAME }}
-          release_name: Release ${{ env.TAG_NAME }}
+          tag_name: ${{ needs.check-release.outputs.latest_tag }}
+          release_name: Release ${{ needs.check-release.outputs.latest_tag }}
           body: |
             ## Safe-Wallet-Monorepo on IPFS Release
-            - Version: ${{ env.TAG_NAME }}
-            - Release link: https://github.com/safe-global/safe-wallet-monorepo/releases/tag/${{ env.TAG_NAME }}
+            - Version: ${{ needs.check-release.outputs.latest_tag }}
+            - Release link: https://github.com/safe-global/safe-wallet-monorepo/releases/tag/${{ needs.check-release.outputs.latest_tag }}
             - IPFS hash: ${{ needs.deploy.outputs.ipfs_hash }}
             - IPFS link: https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/
           draft: false
