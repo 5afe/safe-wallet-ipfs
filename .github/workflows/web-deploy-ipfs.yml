@@ -156,14 +156,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ needs.check-release.outputs.latest_tag }}
-          release_name: Release ${{ needs.check-release.outputs.latest_tag }}
+          release_name: Safe-wallet-monorepo Release ${{ needs.check-release.outputs.latest_tag }}
           body: |
             - 🧩 Version: `${{ needs.check-release.outputs.latest_tag }}`
             - 📦 Release link: https://github.com/safe-global/safe-wallet-monorepo/releases/tag/${{ needs.check-release.outputs.latest_tag }}
             - 🔏 CID: `${{ needs.deploy.outputs.ipfs_hash }}`
             - 🌐 Preview:
-              - [dweb.link](https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/)
-              - [w3s.link](https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/)
-              - [inbrowser.link](https://inbrowser.link/ipfs/${{ needs.deploy.outputs.ipfs_hash }})
+              - <a href="https://dweb.link/ipfs/${{ needs.deploy.outputs.ipfs_hash }}" target="_blank">https://dweb.link/ipfs/${{ needs.deploy.outputs.ipfs_hash }}</a>
+              - <a href="https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/" target="_blank">https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/</a>
+              - <a href="https://inbrowser.link/ipfs/${{ needs.deploy.outputs.ipfs_hash }}" target="_blank">https://inbrowser.link/ipfs/${{ needs.deploy.outputs.ipfs_hash }}</a>
           draft: false
           prerelease: false
