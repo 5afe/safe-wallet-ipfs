@@ -165,7 +165,7 @@ jobs:
             - 📦 Release link: https://github.com/safe-global/safe-wallet-monorepo/releases/tag/${{ needs.check-release.outputs.latest_tag }}
             - 🔏 CID: `${{ needs.deploy.outputs.cid }}`
             - 🌐 Preview:
-              - [https://${{ needs.deploy.outputs.cid }}.ipfs.w3s.link](https://${{ needs.deploy.outputs.cid }}.ipfs.w3s.link/)
+              - [https://${{ needs.deploy.outputs.cid }}.ipfs.dweb.link](https://${{ needs.deploy.outputs.cid }}.ipfs.dweb.link/)
               - [https://${{ needs.deploy.outputs.cid }}.ipfs.w3s.link](https://${{ needs.deploy.outputs.cid }}.ipfs.w3s.link/)
               - [https://${{ needs.deploy.outputs.cid }}.ipfs.inbrowser.link](https://${{ needs.deploy.outputs.cid }}.ipfs.inbrowser.link/)
           draft: false
