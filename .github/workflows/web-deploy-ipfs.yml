@@ -16,6 +16,7 @@ jobs:
   check-release:
     runs-on: ubuntu-latest
     name: Check for new release
+
     outputs:
       new_release: ${{ steps.compare.outputs.new_release }}
       latest_tag: ${{ steps.latest_release_info.outputs.latest_tag }}
@@ -68,14 +69,16 @@ jobs:
 
   ## Deploy the web app to IPFS
   ## Outputs:
-  ## - ipfs_hash: the IPFS hash of the deployed web app
+  ## - cid: the IPFS hash (CID) of the deployed web app
   deploy:
     if: ${{ needs.check-release.outputs.new_release == 'true' }}
     runs-on: ubuntu-latest
     name: Deploy to IPFS
     needs: check-release
+
     outputs:
-      ipfs_hash: ${{ steps.deploy_ipfs.outputs.cid }}
+      cid: ${{ steps.deploy_ipfs.outputs.cid }}
+
     permissions:
       contents: read
       statuses: write
@@ -125,10 +128,9 @@ jobs:
           pinata-jwt-token: ${{ secrets.PINATA_JWT }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Print IPFS hash and add to outputs
+      - name: Store CID in outputs
         run: |
-          echo "IPFS hash: ${{ steps.deploy_ipfs.outputs.cid }}"
-          echo "ipfs_hash=${{ steps.deploy_ipfs.outputs.cid }}" >> $GITHUB_OUTPUT
+          echo "cid=${{ steps.deploy_ipfs.outputs.cid }}" >> $GITHUB_OUTPUT
 
       - name: Clean up temporary files
         run: |
@@ -136,12 +138,13 @@ jobs:
 
   ## Create a release note
   release_note:
-    if: ${{ needs.deploy.outputs.ipfs_hash != '' }}
+    if: ${{ needs.deploy.outputs.cid != '' }}
     runs-on: ubuntu-latest
     name: Create Release Note
     needs:
       - check-release
       - deploy
+
     permissions:
       contents: write
       statuses: write
@@ -156,14 +159,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ needs.check-release.outputs.latest_tag }}
-          release_name: Safe-wallet-monorepo Release ${{ needs.check-release.outputs.latest_tag }}
+          release_name: safe-wallet-monorepo ${{ needs.check-release.outputs.latest_tag }}
           body: |
             - 🧩 Version: `${{ needs.check-release.outputs.latest_tag }}`
             - 📦 Release link: https://github.com/safe-global/safe-wallet-monorepo/releases/tag/${{ needs.check-release.outputs.latest_tag }}
-            - 🔏 CID: `${{ needs.deploy.outputs.ipfs_hash }}`
+            - 🔏 CID: `${{ needs.deploy.outputs.cid }}`
             - 🌐 Preview:
-              - <a href="https://dweb.link/ipfs/${{ needs.deploy.outputs.ipfs_hash }}" target="_blank">https://dweb.link/ipfs/${{ needs.deploy.outputs.ipfs_hash }}</a>
-              - <a href="https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/" target="_blank">https://${{ needs.deploy.outputs.ipfs_hash }}.ipfs.w3s.link/</a>
-              - <a href="https://inbrowser.link/ipfs/${{ needs.deploy.outputs.ipfs_hash }}" target="_blank">https://inbrowser.link/ipfs/${{ needs.deploy.outputs.ipfs_hash }}</a>
+              - [https://${{ needs.deploy.outputs.cid }}.ipfs.w3s.link](https://${{ needs.deploy.outputs.cid }}.ipfs.w3s.link/)
+              - [https://${{ needs.deploy.outputs.cid }}.ipfs.w3s.link](https://${{ needs.deploy.outputs.cid }}.ipfs.w3s.link/)
+              - [https://${{ needs.deploy.outputs.cid }}.ipfs.inbrowser.link](https://${{ needs.deploy.outputs.cid }}.ipfs.inbrowser.link/)
           draft: false
           prerelease: false
