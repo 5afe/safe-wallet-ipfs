@@ -42,7 +42,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .prev_release
-          key: latest-release
+          key: latest-release-${{ steps.latest_release_info.outputs.latest_tag }}
+          restore-keys: |
+            latest-release-
 
       - name: Compare current tag with cached release tag
         id: compare
@@ -67,7 +69,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .prev_release
-          key: latest-release
+          key: latest-release-${{ steps.latest_release_info.outputs.latest_tag }}
+          restore-keys: |
+            latest-release-
 
   ## Deploy the web app to IPFS
   ## Outputs:
