@@ -39,7 +39,7 @@ jobs:
 
       - name: Restore last release tag
         id: restore-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .prev_release
           key: latest-release-${{ steps.latest_release_info.outputs.latest_tag }}
@@ -66,12 +66,10 @@ jobs:
       - name: Cache Last Release Tag
         if: steps.compare.outputs.new_release == 'true'
         id: cache-last-release-tag
-        uses: actions/cache@v4
+        uses: actions/cache/save@v4
         with:
           path: .prev_release
           key: latest-release-${{ steps.latest_release_info.outputs.latest_tag }}
-          restore-keys: |
-            latest-release-
 
   ## Deploy the web app to IPFS
   ## Outputs:
