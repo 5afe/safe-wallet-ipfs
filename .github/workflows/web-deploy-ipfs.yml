@@ -57,19 +57,10 @@ jobs:
           if [ "$TAG_NAME" != "null" ] && [ "$TAG_NAME" != "$PREV_TAG_NAME" ]; then
             echo "New release detected :: $TAG_NAME"
             echo "new_release=true" >> $GITHUB_OUTPUT
-            echo "$TAG_NAME" > .prev_release
           else
             echo "No new release detected"
             echo "new_release=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Cache Last Release Tag
-        if: steps.compare.outputs.new_release == 'true'
-        id: cache-last-release-tag
-        uses: actions/cache/save@v4
-        with:
-          path: .prev_release
-          key: latest-release-${{ steps.latest_release_info.outputs.latest_tag }}
 
   ## Deploy the web app to IPFS
   ## Outputs:
@@ -174,3 +165,16 @@ jobs:
               - [https://${{ needs.deploy.outputs.cid }}.ipfs.inbrowser.link](https://${{ needs.deploy.outputs.cid }}.ipfs.inbrowser.link/)
           draft: false
           prerelease: false
+
+      - name: Prepare to store Last Release Tag in Cache
+        id: prepare-cache-last-release-tag
+        run: |
+          TAG_NAME=${{ needs.check-release.outputs.latest_tag }}
+          echo "$TAG_NAME" > .prev_release
+
+      - name: Cache Last Release Tag
+        id: cache-last-release-tag
+        uses: actions/cache/save@v4
+        with:
+          path: .prev_release
+          key: latest-release-${{ needs.check-release.outputs.latest_tag }}
