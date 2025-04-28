@@ -26,16 +26,40 @@ jobs:
     steps:
       - name: Get latest release info
         id: latest_release_info
+        env:
+          API_URL: https://api.github.com/repos/safe-global/safe-wallet-monorepo/releases/latest
+          MAX_ATTEMPTS: 3 ## Max number of attempts to fetch the release info
+          DELAY: 10 ## seconds
         run: |
-          API_URL="https://api.github.com/repos/safe-global/safe-wallet-monorepo/releases/latest"
-          RELEASE_INFO=$(curl -s $API_URL)
+          ## Fetch the latest release info from the GitHub API with retry logic
+          ## This is necessary because the GitHub API sometimes fails
+          ## see https://github.com/5afe/safe-wallet-ipfs/actions/runs/14427680232/job/40458689018
+          attempt=1
+          while true; do
+            echo "Attempt $attempt to fetch release info..."
+            RELEASE_INFO=$(curl -s --fail "$API_URL")
+            if [ $? -eq 0 ] && echo "$RELEASE_INFO" | jq -e '.assets' > /dev/null; then
+              break
+            fi
+
+            if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
+              echo "Failed to fetch release info after $attempt attempts."
+              exit 1
+            fi
+
+            attempt=$((attempt + 1))
+            sleep "$DELAY"
+          done
+
+          ## Extract the tag name, tar URL, and checksum URL from the release info
           TAG_NAME=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
           TAR_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url')
           CHECKSUM_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name | endswith("-sha256-checksum.txt")) | .browser_download_url')
 
-          echo "latest_tag=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "tar_url=$TAR_URL" >> $GITHUB_OUTPUT
-          echo "checksum_url=$CHECKSUM_URL" >> $GITHUB_OUTPUT
+          ## Store the tag name, tar URL, and checksum URL in the GitHub output
+          echo "latest_tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "tar_url=$TAR_URL" >> "$GITHUB_OUTPUT"
+          echo "checksum_url=$CHECKSUM_URL" >> "$GITHUB_OUTPUT"
 
       - name: Restore last release tag
         id: restore-cache
