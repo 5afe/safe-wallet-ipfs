@@ -37,7 +37,7 @@ jobs:
           attempt=1
           while true; do
             echo "Attempt $attempt to fetch release info..."
-            RELEASE_INFO=$(curl -s --fail "$API_URL")
+            RELEASE_INFO=$(curl -sSf "$API_URL")
             if [ $? -eq 0 ] && echo "$RELEASE_INFO" | jq -e '.assets' > /dev/null; then
               break
             fi
