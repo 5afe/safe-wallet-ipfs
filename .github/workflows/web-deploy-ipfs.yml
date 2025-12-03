@@ -27,7 +27,7 @@ jobs:
       - name: Get latest release info
         id: latest_release_info
         env:
-          API_URL: https://api.github.com/repos/safe-global/safe-wallet-monorepo/releases/latest
+          API_URL: https://api.github.com/repos/safe-global/safe-wallet-monorepo/releases
           MAX_ATTEMPTS: 3 ## Max number of attempts to fetch the release info
           DELAY: 10 ## seconds
         run: |
@@ -37,9 +37,17 @@ jobs:
           attempt=1
           while true; do
             echo "Attempt $attempt to fetch release info..."
-            RELEASE_INFO=$(curl -sSf "$API_URL")
-            if [ $? -eq 0 ] && echo "$RELEASE_INFO" | jq -e '.assets' > /dev/null; then
-              break
+            RELEASES=$(curl -sSf "$API_URL")
+            if [ $? -eq 0 ] && echo "$RELEASES" | jq -e '. | length > 0' > /dev/null; then
+              # Filter for the latest non-draft, non-prerelease
+              RELEASE_INFO=$(echo "$RELEASES" | jq '[.[] | select(.draft == false and .prerelease == false)][0]')
+              
+              # Check if we found a valid release
+              if [ "$RELEASE_INFO" != "null" ] && echo "$RELEASE_INFO" | jq -e '.assets' > /dev/null; then
+                break
+              fi
+              
+              echo "No stable release found, retrying..."
             fi
 
             if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
