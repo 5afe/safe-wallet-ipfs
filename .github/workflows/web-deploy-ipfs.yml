@@ -39,8 +39,8 @@ jobs:
             echo "Attempt $attempt to fetch release info..."
             RELEASES=$(curl -sSf "$API_URL")
             if [ $? -eq 0 ] && echo "$RELEASES" | jq -e '. | length > 0' > /dev/null; then
-              # Filter for the latest non-draft, non-prerelease
-              RELEASE_INFO=$(echo "$RELEASES" | jq '[.[] | select(.draft == false and .prerelease == false)][0]')
+              # Filter for the latest non-draft, non-prerelease wallet release (tag starts with "v")
+              RELEASE_INFO=$(echo "$RELEASES" | jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith("v")))][0]')
               
               # Check if we found a valid release
               if [ "$RELEASE_INFO" != "null" ] && echo "$RELEASE_INFO" | jq -e '.assets' > /dev/null; then
