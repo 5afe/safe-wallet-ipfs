@@ -37,16 +37,16 @@ jobs:
           attempt=1
           while true; do
             echo "Attempt $attempt to fetch release info..."
-            RELEASES=$(curl -sSf "$API_URL")
-            if [ $? -eq 0 ] && echo "$RELEASES" | jq -e '. | length > 0' > /dev/null; then
+            curl -sSf "$API_URL" > /tmp/releases.json
+            if [ $? -eq 0 ] && jq -e '. | length > 0' /tmp/releases.json > /dev/null; then
               # Filter for the latest non-draft, non-prerelease wallet release (tag starts with "v")
-              RELEASE_INFO=$(echo "$RELEASES" | jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith("v")))][0]')
-              
+              jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith("v")))][0]' /tmp/releases.json > /tmp/release_info.json
+
               # Check if we found a valid release
-              if [ "$RELEASE_INFO" != "null" ] && echo "$RELEASE_INFO" | jq -e '.assets' > /dev/null; then
+              if [ "$(cat /tmp/release_info.json)" != "null" ] && jq -e '.assets' /tmp/release_info.json > /dev/null; then
                 break
               fi
-              
+
               echo "No stable release found, retrying..."
             fi
 
@@ -60,9 +60,9 @@ jobs:
           done
 
           ## Extract the tag name, tar URL, and checksum URL from the release info
-          TAG_NAME=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
-          TAR_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url')
-          CHECKSUM_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name | endswith("-sha256-checksum.txt")) | .browser_download_url')
+          TAG_NAME=$(jq -r '.tag_name' /tmp/release_info.json)
+          TAR_URL=$(jq -r '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url' /tmp/release_info.json)
+          CHECKSUM_URL=$(jq -r '.assets[] | select(.name | endswith("-sha256-checksum.txt")) | .browser_download_url' /tmp/release_info.json)
 
           ## Store the tag name, tar URL, and checksum URL in the GitHub output
           echo "latest_tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
