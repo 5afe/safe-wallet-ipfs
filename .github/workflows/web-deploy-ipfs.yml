@@ -146,18 +146,21 @@ jobs:
           done
 
       - name: Deploy to IPFS
-        uses: ipfs/ipfs-deploy-action@v1
         id: deploy_ipfs
-        with:
-          path-to-deploy: /tmp/release/out
-          storacha-key: ${{ secrets.STORACHA_KEY }}
-          storacha-proof: ${{ secrets.STORACHA_PROOF }}
-          pinata-jwt-token: ${{ secrets.PINATA_JWT }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Store CID in outputs
         run: |
-          echo "cid=${{ steps.deploy_ipfs.outputs.cid }}" >> $GITHUB_OUTPUT
+          cd /tmp/release/out
+
+          output=$(npx omnipin@1.7 deploy . --ens ${{ vars.ENS_NAME }} --safe ${{ vars.SAFE_ADDRESS }} --strict)
+          echo "$output"
+          cid=$(echo "$output" | awk '/Root CID:/ {print $NF}')
+          [ -n "$cid" ] || (echo "CID not found!" && exit 1)
+          echo "cid=$cid" >> $GITHUB_OUTPUT
+          echo "$output" >> $GITHUB_STEP_SUMMARY
+        env:
+          OMNIPIN_FILECOIN_TOKEN: ${{ secrets.OMNIPIN_FILECOIN_TOKEN }}
+          OMNIPIN_STORACHA_TOKEN: ${{ secrets.STORACHA_KEY }}
+          OMNIPIN_STORACHA_PROOF: ${{ secrets.STORACHA_PROOF }}
+          OMNIPIN_PINATA_TOKEN: ${{ secrets.PINATA_JWT }}
 
       - name: Clean up temporary files
         run: |
