@@ -153,18 +153,66 @@ jobs:
             fi
           done
 
-      ## Merkleize the build into a CAR file. Since v2 the action only produces the
-      ## CAR and its root CID; pinning to third-party services is done by us below.
-      ## See https://github.com/ipshipyard/ipfs-deploy-action/blob/main/CHANGELOG.md
+      ## Kubo is fetched directly rather than via ipfs/download-ipfs-distribution-action
+      ## because this repo requires every action to be pinned to a full-length commit
+      ## SHA, and that check is transitive: ipshipyard/ipfs-deploy-action@v2 references
+      ## five nested actions by floating tag, so it cannot be consumed here even when
+      ## pinned itself. Pinning the release tarball's digest is the stronger guarantee
+      ## anyway -- a SHA-pinned installer action would still fetch a mutable dist.
+      - name: Set up Kubo
+        env:
+          KUBO_VERSION: v0.42.0
+          ## sha512 of kubo_${KUBO_VERSION}_linux-amd64.tar.gz, matching
+          ## https://dist.ipfs.tech/kubo/v0.42.0/kubo_v0.42.0_linux-amd64.tar.gz.sha512
+          KUBO_SHA512: 054c38a0cf66f7d738e25085ad62cb3a42d03d4bac329b7dd25c1d71cf18e1ce87d55b1d1b705b04c65210dca9109973579e0eb1cd72f6341ecb3311d840d156
+        run: |
+          ## The pinned digest is the linux-amd64 build, so fail loudly rather than
+          ## silently mismatching if this job is ever moved to another runner arch.
+          if [ "$(uname -m)" != "x86_64" ]; then
+            echo "::error::Expected an x86_64 runner, got $(uname -m). Update KUBO_SHA512 for this arch." >&2
+            exit 1
+          fi
+
+          cd /tmp
+          curl -sSfL "https://dist.ipfs.tech/kubo/${KUBO_VERSION}/kubo_${KUBO_VERSION}_linux-amd64.tar.gz" -o kubo.tar.gz
+          echo "${KUBO_SHA512}  kubo.tar.gz" | sha512sum -c -
+          tar -xzf kubo.tar.gz
+          echo "/tmp/kubo" >> "$GITHUB_PATH"
+
+      ## Merkleize the build into a CAR file, then pin it to Pinata below. This mirrors
+      ## what ipfs-deploy-action v2 does for our configuration; of its 16 steps we only
+      ## ever ran these, since the commit-status, PR-comment and CAR-artifact steps are
+      ## all gated off when no Kubo or IPFS Cluster endpoint is configured.
       - name: Create IPFS CAR
-        uses: ipshipyard/ipfs-deploy-action@a18ef08993e485391c5879770d9bc9f1143653ce # v2.0.0
         id: deploy_ipfs
-        with:
-          path-to-deploy: /tmp/release/out
-          ## IPIP-0499 defaults. Produces the same root CID as the
-          ## "--cid-version 1 --chunker size-1048576" options used by v1.
-          cid-profile: unixfs-v1-2025
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          PATH_TO_DEPLOY: /tmp/release/out
+          CAR_PATH: /tmp/build.car
+          ## IPIP-0499 defaults, resolving to CidVersion 1 + the size-1048576 chunker
+          ## + raw leaves. Verified to produce the same root CID as both the profile
+          ## used since #3 and the "--cid-version 1 --chunker size-1048576" of v1.
+          CID_PROFILE: unixfs-v1-2025
+          IPFS_PATH: /tmp/ipfs-repo
+        run: |
+          if [ ! -d "$PATH_TO_DEPLOY" ] || [ -z "$(ls -A "$PATH_TO_DEPLOY")" ]; then
+            echo "::error::$PATH_TO_DEPLOY does not exist or is empty" >&2
+            exit 1
+          fi
+
+          ipfs init > /dev/null
+          ipfs config profile apply "$CID_PROFILE" > /dev/null
+
+          ## No daemon is running, so this stays entirely local to the runner
+          CID=$(ipfs add -Q -r "$PATH_TO_DEPLOY")
+          if [ -z "$CID" ]; then
+            echo "::error::ipfs add returned an empty CID" >&2
+            exit 1
+          fi
+          ipfs dag export "$CID" > "$CAR_PATH"
+
+          echo "cid=$CID" >> "$GITHUB_OUTPUT"
+          echo "car-path=$CAR_PATH" >> "$GITHUB_OUTPUT"
+          echo "Root CID: $CID"
 
       ## Pinata V3 Files API, following the upstream recipe:
       ## https://github.com/ipshipyard/ipfs-deploy-action/blob/main/docs/recipes/pinata.md
@@ -204,7 +252,8 @@ jobs:
 
       - name: Clean up temporary files
         run: |
-          rm -rf /tmp/release /tmp/checksum.txt /tmp/release.tar.gz
+          rm -rf /tmp/release /tmp/checksum.txt /tmp/release.tar.gz \
+                 /tmp/build.car /tmp/ipfs-repo /tmp/kubo /tmp/kubo.tar.gz
 
   ## Create a release note
   release_note:
