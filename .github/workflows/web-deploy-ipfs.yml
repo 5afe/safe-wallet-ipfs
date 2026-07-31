@@ -28,6 +28,10 @@ jobs:
         id: latest_release_info
         env:
           API_URL: https://api.github.com/repos/safe-global/safe-wallet-monorepo/releases
+          ## The monorepo publishes one release stream per app and prefixes the tag
+          ## accordingly (web-v*, tx-builder-v*, ...). We only deploy the web app.
+          ## Tags were unprefixed ("v*") until web-v1.86.0 (2026-04-01).
+          RELEASE_TAG_PREFIX: web-v
           MAX_ATTEMPTS: 3 ## Max number of attempts to fetch the release info
           DELAY: 10 ## seconds
         run: |
@@ -37,17 +41,18 @@ jobs:
           attempt=1
           while true; do
             echo "Attempt $attempt to fetch release info..."
-            curl -sSf "$API_URL" > /tmp/releases.json
-            if [ $? -eq 0 ] && jq -e '. | length > 0' /tmp/releases.json > /dev/null; then
-              # Filter for the latest non-draft, non-prerelease wallet release (tag starts with "v")
-              jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith("v")))][0]' /tmp/releases.json > /tmp/release_info.json
+            if curl -sSf "$API_URL" > /tmp/releases.json && jq -e '. | length > 0' /tmp/releases.json > /dev/null; then
+              # Filter for the latest non-draft, non-prerelease web release
+              jq --arg prefix "$RELEASE_TAG_PREFIX" \
+                '[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith($prefix)))][0]' \
+                /tmp/releases.json > /tmp/release_info.json
 
-              # Check if we found a valid release
-              if [ "$(cat /tmp/release_info.json)" != "null" ] && jq -e '.assets' /tmp/release_info.json > /dev/null; then
+              # Check if we found a valid release carrying the assets we need
+              if jq -e '.assets? // [] | length > 0' /tmp/release_info.json > /dev/null; then
                 break
               fi
 
-              echo "No stable release found, retrying..."
+              echo "No stable '$RELEASE_TAG_PREFIX*' release with assets found, retrying..."
             fi
 
             if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
@@ -64,6 +69,12 @@ jobs:
           TAR_URL=$(jq -r '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url' /tmp/release_info.json)
           CHECKSUM_URL=$(jq -r '.assets[] | select(.name | endswith("-sha256-checksum.txt")) | .browser_download_url' /tmp/release_info.json)
 
+          ## Fail loudly rather than deploying a release we could not fully resolve
+          if [ -z "$TAR_URL" ] || [ -z "$CHECKSUM_URL" ]; then
+            echo "Release $TAG_NAME is missing the tarball or the checksum asset." >&2
+            exit 1
+          fi
+
           ## Store the tag name, tar URL, and checksum URL in the GitHub output
           echo "latest_tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "tar_url=$TAR_URL" >> "$GITHUB_OUTPUT"
@@ -71,7 +82,7 @@ jobs:
 
       - name: Restore last release tag
         id: restore-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: .prev_release
           key: latest-release-${{ steps.latest_release_info.outputs.latest_tag }}
@@ -108,9 +119,6 @@ jobs:
 
     permissions:
       contents: read
-      statuses: write
-      checks: write
-      pull-requests: write
 
     steps:
       - name: Download Tarball and Checksum
@@ -145,19 +153,54 @@ jobs:
             fi
           done
 
-      - name: Deploy to IPFS
-        uses: ipfs/ipfs-deploy-action@v1
+      ## Merkleize the build into a CAR file. Since v2 the action only produces the
+      ## CAR and its root CID; pinning to third-party services is done by us below.
+      ## See https://github.com/ipshipyard/ipfs-deploy-action/blob/main/CHANGELOG.md
+      - name: Create IPFS CAR
+        uses: ipshipyard/ipfs-deploy-action@a18ef08993e485391c5879770d9bc9f1143653ce # v2.0.0
         id: deploy_ipfs
         with:
           path-to-deploy: /tmp/release/out
-          storacha-key: ${{ secrets.STORACHA_KEY }}
-          storacha-proof: ${{ secrets.STORACHA_PROOF }}
-          pinata-jwt-token: ${{ secrets.PINATA_JWT }}
+          ## IPIP-0499 defaults. Produces the same root CID as the
+          ## "--cid-version 1 --chunker size-1048576" options used by v1.
+          cid-profile: unixfs-v1-2025
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Store CID in outputs
+      ## Pinata V3 Files API, following the upstream recipe:
+      ## https://github.com/ipshipyard/ipfs-deploy-action/blob/main/docs/recipes/pinata.md
+      - name: Upload CAR to Pinata
+        env:
+          PINATA_JWT: ${{ secrets.PINATA_JWT }}
+          CID: ${{ steps.deploy_ipfs.outputs.cid }}
+          CAR_PATH: ${{ steps.deploy_ipfs.outputs.car-path }}
+          PIN_NAME: safe-wallet-monorepo-${{ needs.check-release.outputs.latest_tag }}
         run: |
-          echo "cid=${{ steps.deploy_ipfs.outputs.cid }}" >> $GITHUB_OUTPUT
+          ## "car=true" makes Pinata unpack the CAR server-side and pin its root CID
+          response=$(curl -sS -w "\n%{http_code}" -X POST \
+            "https://uploads.pinata.cloud/v3/files" \
+            -H "Authorization: Bearer ${PINATA_JWT}" \
+            -F "network=public" \
+            -F "file=@${CAR_PATH}" \
+            -F "name=${PIN_NAME}" \
+            -F "car=true")
+
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Pinata upload failed (HTTP $http_code): $body"
+            exit 1
+          fi
+
+          ## A mismatch would mean the release note advertises a CID that nobody pinned,
+          ## so treat it as a hard failure instead of the warning the recipe suggests.
+          returned_cid=$(echo "$body" | jq -r '.data.cid')
+          if [ "$returned_cid" != "$CID" ]; then
+            echo "::error::Pinata pinned CID $returned_cid but the CAR root is $CID"
+            exit 1
+          fi
+
+          echo "Pinned ${PIN_NAME} on Pinata (CID ${returned_cid})"
 
       - name: Clean up temporary files
         run: |
@@ -174,26 +217,21 @@ jobs:
 
     permissions:
       contents: write
-      statuses: write
-      checks: write
-      pull-requests: write
 
     steps:
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ needs.check-release.outputs.latest_tag }}
-          release_name: safe-wallet-monorepo ${{ needs.check-release.outputs.latest_tag }}
+          name: safe-wallet-monorepo ${{ needs.check-release.outputs.latest_tag }}
           body: |
             - 🧩 Version: `${{ needs.check-release.outputs.latest_tag }}`
             - 📦 Release link: https://github.com/safe-global/safe-wallet-monorepo/releases/tag/${{ needs.check-release.outputs.latest_tag }}
             - 🔏 CID: `${{ needs.deploy.outputs.cid }}`
             - 🌐 Preview:
               - [https://${{ needs.deploy.outputs.cid }}.ipfs.dweb.link](https://${{ needs.deploy.outputs.cid }}.ipfs.dweb.link/)
-              - [https://${{ needs.deploy.outputs.cid }}.ipfs.w3s.link](https://${{ needs.deploy.outputs.cid }}.ipfs.w3s.link/)
               - [https://${{ needs.deploy.outputs.cid }}.ipfs.inbrowser.link](https://${{ needs.deploy.outputs.cid }}.ipfs.inbrowser.link/)
           draft: false
           prerelease: false
@@ -206,7 +244,7 @@ jobs:
 
       - name: Cache Last Release Tag
         id: cache-last-release-tag
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: .prev_release
           key: latest-release-${{ needs.check-release.outputs.latest_tag }}
